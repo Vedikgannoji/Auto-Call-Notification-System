@@ -1,0 +1,165 @@
+{
+  "brand_identity": {
+    "name": "MLR Institute of Technology Auto-Call System",
+    "theme_mode": "light",
+    "primary_color": "#0F172A",
+    "accent_color": "#2563EB",
+    "font_heading": "Manrope",
+    "font_body": "Inter"
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Manrope, sans-serif",
+      "weights": {
+        "h1": "800",
+        "h2": "700",
+        "h3": "600"
+      },
+      "sizes": {
+        "h1": "text-4xl md:text-5xl tracking-tight",
+        "h2": "text-3xl md:text-4xl tracking-tight",
+        "h3": "text-2xl md:text-3xl tracking-normal",
+        "h4": "text-xl font-bold tracking-normal"
+      }
+    },
+    "body": {
+      "font_family": "Inter, sans-serif",
+      "sizes": {
+        "base": "text-base leading-relaxed",
+        "small": "text-sm text-muted-foreground",
+        "tiny": "text-xs font-medium uppercase tracking-wider"
+      }
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#0F172A",
+        "foreground": "#F8FAFC"
+      },
+      "secondary": {
+        "DEFAULT": "#F1F5F9",
+        "foreground": "#0F172A"
+      },
+      "accent": {
+        "DEFAULT": "#2563EB",
+        "foreground": "#FFFFFF"
+      },
+      "destructive": {
+        "DEFAULT": "#EF4444",
+        "foreground": "#FFFFFF"
+      },
+      "success": {
+        "DEFAULT": "#10B981",
+        "foreground": "#FFFFFF"
+      },
+      "warning": {
+        "DEFAULT": "#F59E0B",
+        "foreground": "#FFFFFF"
+      },
+      "background": "#FFFFFF",
+      "surface": "#F8FAFC",
+      "border": "#E2E8F0"
+    },
+    "gradients": {
+      "brand_subtle": "bg-gradient-to-br from-blue-50 to-slate-50",
+      "login_overlay": "bg-gradient-to-t from-black/80 via-black/40 to-transparent"
+    }
+  },
+  "layout_strategy": {
+    "dashboard_grid": {
+      "type": "bento_high_density",
+      "columns": "grid-cols-1 md:grid-cols-12",
+      "gap": "gap-4 md:gap-6",
+      "rules": [
+        "Use col-span-12 for page headers",
+        "Use col-span-12 md:col-span-3 for stat cards",
+        "Use col-span-12 md:col-span-8 for main charts",
+        "Use col-span-12 md:col-span-4 for activity feeds",
+        "Ensure all grid items stretch to fill height (h-full)"
+      ]
+    },
+    "spacing": {
+      "container_padding": "p-4 md:p-8",
+      "section_gap": "space-y-6",
+      "card_internal": "p-6"
+    }
+  },
+  "components": {
+    "buttons": {
+      "style": "rounded-md font-medium transition-all duration-200",
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md",
+      "secondary": "bg-white border border-input hover:bg-accent hover:text-accent-foreground",
+      "ghost": "hover:bg-slate-100 hover:text-slate-900",
+      "destructive": "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+    },
+    "cards": {
+      "style": "bg-white border border-border rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200",
+      "hover_effect": "hover:border-primary/20"
+    },
+    "inputs": {
+      "style": "rounded-md border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    },
+    "sidebar": {
+      "style": "bg-slate-900 text-slate-100 w-64 hidden md:flex flex-col border-r border-slate-800",
+      "item_active": "bg-primary/50 text-white font-medium",
+      "item_inactive": "text-slate-400 hover:text-white hover:bg-slate-800/50"
+    }
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "card": "shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_-1px_rgba(0,0,0,0.1)]",
+      "dropdown": "shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]",
+      "modal": "shadow-2xl"
+    },
+    "borders": {
+      "default": "border border-slate-200",
+      "subtle": "border-b border-slate-100"
+    },
+    "glassmorphism": {
+      "header": "bg-white/80 backdrop-blur-md border-b border-slate-200/50 supports-[backdrop-filter]:bg-white/60"
+    }
+  },
+  "motion": {
+    "default_transition": "transition-all duration-200 ease-in-out",
+    "hover_lift": "hover:-translate-y-0.5",
+    "page_enter": {
+      "initial": { "opacity": 0, "y": 10 },
+      "animate": { "opacity": 1, "y": 0 },
+      "exit": { "opacity": 0, "y": -10 }
+    }
+  },
+  "accessibility": {
+    "contrast_check": "Ensure all text on colored backgrounds meets WCAG AA standards (4.5:1 ratio).",
+    "focus_states": "Visible focus rings on all interactive elements.",
+    "aria_labels": "Mandatory for icon-only buttons."
+  },
+  "media": {
+    "image_urls": {
+      "hero_login": "https://customer-assets.emergentagent.com/job_3bb85702-731e-4925-a73b-daa0be7005b3/artifacts/wzgy3auo_image.png",
+      "student_avatars": [
+        "https://images.unsplash.com/photo-1717672135267-c788f9582870?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHw0fHxpbmRpYW4lMjBjb2xsZWdlJTIwc3R1ZGVudCUyMHBvcnRyYWl0JTIwd2hpdGUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MjU1NjA3MXww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1757351122506-3c6a394e9cd8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwyfHxpbmRpYW4lMjBjb2xsZWdlJTIwc3R1ZGVudCUyMHBvcnRyYWl0JTIwd2hpdGUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MjU1NjA3MXww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1691654640333-22335256a8e6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjBjb2xsZWdlJTIwc3R1ZGVudCUyMHBvcnRyYWl0JTIwd2hpdGUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MjU1NjA3MXww&ixlib=rb-4.1.0&q=85"
+      ],
+      "empty_state": "https://images.unsplash.com/photo-1758413350815-7b06dbbfb9a7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBjb2xsZWdlJTIwY2xhc3Nyb29tJTIwZW1wdHl8ZW58MHx8fHwxNzcyNTU2MDcyfDA&ixlib=rb-4.1.0&q=85"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Install 'lucide-react' for icons if not present.",
+    "Use 'recharts' for the attendance analytics chart.",
+    "Implement the Dashboard with a Sidebar layout using 'Outlet' from react-router-dom.",
+    "Ensure the Login page uses the provided hero image as a split-screen or full-background with overlay.",
+    "Use 'Sonner' for all toast notifications (success/error).",
+    "Strictly follow the 'Bento Grid' layout for the dashboard home.",
+    "For the Student List, use a dense table with pagination and bulk actions (checkboxes).",
+    "Add 'data-testid' to all buttons, inputs, and links."
+  ],
+  "universal_guidelines": [
+    "Do not use gradients for text.",
+    "Avoid centering text in long paragraphs.",
+    "Use 'p-6' or 'p-8' padding for cards to allow breathing room.",
+    "Use skeleton loaders for data fetching states.",
+    "Ensure mobile responsiveness: Stack the sidebar into a drawer/sheet on mobile."
+  ]
+}
