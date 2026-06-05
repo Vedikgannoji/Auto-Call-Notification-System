@@ -1,4 +1,4 @@
-# MLR Institute Auto-Call Notification System
+# Auto-Call Notification System
 
 ## Overview
 
