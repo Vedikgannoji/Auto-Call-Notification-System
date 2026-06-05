@@ -34,13 +34,31 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 # Twilio Configuration
-twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID', '')
-twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN', '')
-twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER', '')
+twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID', '').strip()
+twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN', '').strip()
+twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER', '').strip()
 twilio_client = None
+twilio_configured = False
 
-if twilio_account_sid and twilio_auth_token:
-    twilio_client = Client(twilio_account_sid, twilio_auth_token)
+# Initialize Twilio client with validation
+if twilio_account_sid and twilio_auth_token and twilio_phone_number:
+    try:
+        twilio_client = Client(twilio_account_sid, twilio_auth_token)
+        twilio_configured = True
+        logging.info(f"✓ Twilio client initialized successfully with phone number: {twilio_phone_number}")
+    except Exception as e:
+        logging.error(f"✗ Failed to initialize Twilio client: {str(e)}")
+        twilio_client = None
+        twilio_configured = False
+else:
+    missing = []
+    if not twilio_account_sid:
+        missing.append("TWILIO_ACCOUNT_SID")
+    if not twilio_auth_token:
+        missing.append("TWILIO_AUTH_TOKEN")
+    if not twilio_phone_number:
+        missing.append("TWILIO_PHONE_NUMBER")
+    logging.warning(f"⚠ Twilio not configured. Missing: {', '.join(missing)}")
 
 # Create the main app
 app = FastAPI()
@@ -163,6 +181,15 @@ class DashboardStats(BaseModel):
     notifications_sent_today: int
     failed_notifications: int
 
+class TwilioTestRequest(BaseModel):
+    phone_number: str = Field(..., description="Phone number in E.164 format (e.g., +919876543210)")
+
+class TwilioTestResponse(BaseModel):
+    twilio_configured: bool
+    sms_result: dict
+    voice_result: dict
+    message: str
+
 # Utility Functions
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -194,104 +221,248 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def send_sms(phone_number: str, message: str) -> tuple[bool, Optional[str]]:
-    """Send SMS via Twilio"""
-    if not twilio_client:
-        return False, "Twilio not configured"
+    """
+    Send SMS via Twilio
+    
+    Args:
+        phone_number: Phone number in E.164 format (e.g., +919876543210)
+        message: SMS message content
+        
+    Returns:
+        Tuple of (success: bool, result: str)
+        - If success: (True, message_sid)
+        - If failure: (False, error_message)
+    """
+    if not twilio_configured or not twilio_client:
+        error_msg = "Twilio not configured. Please set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in .env"
+        logging.error(f"SMS Failed: {error_msg}")
+        return False, error_msg
     
     try:
+        logging.info(f"Attempting to send SMS to {phone_number}")
+        
+        # Send SMS via Twilio
         message_obj = twilio_client.messages.create(
             body=message,
             from_=twilio_phone_number,
             to=phone_number
         )
+        
+        logging.info(f"✓ SMS sent successfully to {phone_number}. SID: {message_obj.sid}, Status: {message_obj.status}")
         return True, message_obj.sid
+        
     except Exception as e:
-        return False, str(e)
+        error_msg = f"SMS sending failed: {str(e)}"
+        logging.error(f"✗ {error_msg} (to: {phone_number})")
+        return False, error_msg
 
-async def make_voice_call(phone_number: str, message: str) -> tuple[bool, Optional[str]]:
-    """Make voice call via Twilio"""
-    if not twilio_client:
-        return False, "Twilio not configured"
+async def make_voice_call(phone_number: str, message: str, language: str = "en-IN") -> tuple[bool, Optional[str]]:
+    """
+    Make voice call via Twilio with TwiML
+    
+    Args:
+        phone_number: Phone number in E.164 format (e.g., +919876543210)
+        message: Voice message content
+        language: TwiML language code (default: en-IN for Indian English)
+                  Supported: en-IN, hi-IN, ta-IN, te-IN
+        
+    Returns:
+        Tuple of (success: bool, result: str)
+        - If success: (True, call_sid)
+        - If failure: (False, error_message)
+    """
+    if not twilio_configured or not twilio_client:
+        error_msg = "Twilio not configured. Please set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in .env"
+        logging.error(f"Voice call failed: {error_msg}")
+        return False, error_msg
     
     try:
-        # Using Twilio's TwiML for voice
-        twiml = f'<Response><Say language="en-IN">{message}</Say></Response>'
+        logging.info(f"Attempting to make voice call to {phone_number} in language: {language}")
+        
+        # Map language codes to Twilio-supported languages
+        language_map = {
+            "english": "en-IN",
+            "hindi": "hi-IN",
+            "tamil": "ta-IN",
+            "telugu": "te-IN"
+        }
+        
+        # Get proper language code
+        twiml_language = language_map.get(language.lower(), language)
+        
+        # Escape XML special characters in message
+        safe_message = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        
+        # Create TwiML for voice call
+        twiml = f'<Response><Say language="{twiml_language}">{safe_message}</Say></Response>'
+        
+        # Make the call
         call = twilio_client.calls.create(
             twiml=twiml,
             to=phone_number,
             from_=twilio_phone_number
         )
+        
+        logging.info(f"✓ Voice call initiated successfully to {phone_number}. SID: {call.sid}, Status: {call.status}")
         return True, call.sid
+        
     except Exception as e:
-        return False, str(e)
+        error_msg = f"Voice call failed: {str(e)}"
+        logging.error(f"✗ {error_msg} (to: {phone_number})")
+        return False, error_msg
 
 async def process_attendance_and_notify(attendance_date: str):
-    """Background task to process attendance and send notifications"""
-    # Get all absent students for the date
-    absent_records = await db.attendance.find(
-        {"date": attendance_date, "status": "absent"},
-        {"_id": 0}
-    ).to_list(None)
+    """
+    Background task to process attendance and send notifications
     
-    for record in absent_records:
-        # Get student details
-        student = await db.students.find_one({"id": record["student_id"]}, {"_id": 0})
-        if not student:
-            continue
-        
-        # Get parent details
-        parent = await db.parents.find_one({"id": student["parent_id"]}, {"_id": 0})
-        if not parent:
-            continue
-        
-        # Get voice template for parent's language
-        template = await db.voice_templates.find_one(
-            {"language": parent.get("preferred_language", "english")},
+    Process:
+    1. Find all absent students for the date
+    2. For each absent student:
+       - Fetch student details
+       - Fetch parent details
+       - Check for duplicates
+       - Send SMS + Voice call
+       - Log all actions
+    """
+    logging.info(f"📋 Processing attendance for {attendance_date}")
+    
+    try:
+        # Get all absent students for the date
+        absent_records = await db.attendance.find(
+            {"date": attendance_date, "status": "absent"},
             {"_id": 0}
-        )
+        ).to_list(None)
         
-        message = f"Dear {parent['name']}, your child {student['name']} was absent on {attendance_date}. Please contact the college for details."
-        if template:
-            message = template["message"].replace("{parent_name}", parent['name']).replace("{student_name}", student['name']).replace("{date}", attendance_date)
+        if not absent_records:
+            logging.info(f"No absent students found for date: {attendance_date}")
+            return
         
-        # Send SMS
-        sms_success, sms_result = await send_sms(parent["phone_number"], message)
+        logging.info(f"Found {len(absent_records)} absent students for date: {attendance_date}")
         
-        sms_notification = {
-            "id": str(uuid.uuid4()),
-            "student_id": student["id"],
-            "parent_id": parent["id"],
-            "type": "sms",
-            "status": "sent" if sms_success else "failed",
-            "message": message,
-            "phone_number": parent["phone_number"],
-            "retry_count": 0,
-            "error_message": None if sms_success else sms_result,
-            "sent_at": datetime.now(timezone.utc).isoformat() if sms_success else None,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.notifications.insert_one(sms_notification)
+        notifications_sent = 0
+        notifications_failed = 0
         
-        # Small delay before voice call
-        await asyncio.sleep(2)
+        for record in absent_records:
+            try:
+                student_id = record.get("student_id")
+                subject = record.get("subject", "class")
+                
+                # Step 1: Find student
+                student = await db.students.find_one({"id": student_id}, {"_id": 0})
+                if not student:
+                    logging.warning(f"❌ Student not found for ID: {student_id}")
+                    continue
+                
+                roll_number = student.get("roll_number")
+                student_name = student.get("name")
+                logging.info(f"✓ Student found: {roll_number} - {student_name}")
+                
+                # Step 2: Fetch parent
+                parent_id = student.get("parent_id")
+                if not parent_id:
+                    logging.warning(f"❌ Parent not found: No parent_id for student {roll_number}")
+                    continue
+                
+                parent = await db.parents.find_one({"id": parent_id}, {"_id": 0})
+                if not parent:
+                    logging.warning(f"❌ Parent not found: ID {parent_id} for student {roll_number}")
+                    continue
+                
+                parent_name = parent.get("name")
+                phone_number = parent.get("phone_number", "").strip()
+                
+                if not phone_number:
+                    logging.warning(f"❌ Parent not found: No phone number for parent {parent_name}")
+                    continue
+                
+                logging.info(f"✓ Parent found: {parent_name} - {phone_number}")
+                
+                # Step 3: Check for duplicate notifications
+                existing_notification = await db.notifications.find_one({
+                    "student_id": student_id,
+                    "created_at": {"$regex": f"^{attendance_date}"},
+                    "message": {"$regex": subject}
+                })
+                
+                if existing_notification:
+                    logging.info(f"⚠️  Notification already sent for {student_name} ({subject}) on {attendance_date}, skipping")
+                    continue
+                
+                # Step 4: Create message (STRICT FORMAT)
+                message = f"Your ward is absent for {subject} on {attendance_date}"
+                
+                logging.info(f"📤 Sending notification to {phone_number}...")
+                
+                # Step 5: Send SMS
+                sms_success, sms_result = await send_sms(phone_number, message)
+                
+                sms_notification = {
+                    "id": str(uuid.uuid4()),
+                    "student_id": student_id,
+                    "parent_id": parent_id,
+                    "type": "sms",
+                    "status": "sent" if sms_success else "failed",
+                    "message": message,
+                    "phone_number": phone_number,
+                    "retry_count": 0,
+                    "error_message": None if sms_success else sms_result,
+                    "sent_at": datetime.now(timezone.utc).isoformat() if sms_success else None,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.notifications.insert_one(sms_notification)
+                
+                if sms_success:
+                    logging.info(f"✓ SMS sent successfully to {phone_number}")
+                    notifications_sent += 1
+                else:
+                    logging.error(f"✗ SMS failed: {sms_result}")
+                    notifications_failed += 1
+                
+                # Small delay before voice call
+                await asyncio.sleep(2)
+                
+                # Step 6: Make voice call
+                parent_language = parent.get("preferred_language", "english")
+                voice_success, voice_result = await make_voice_call(
+                    phone_number, 
+                    message, 
+                    parent_language
+                )
+                
+                voice_notification = {
+                    "id": str(uuid.uuid4()),
+                    "student_id": student_id,
+                    "parent_id": parent_id,
+                    "type": "voice",
+                    "status": "sent" if voice_success else "failed",
+                    "message": message,
+                    "phone_number": phone_number,
+                    "retry_count": 0,
+                    "error_message": None if voice_success else voice_result,
+                    "sent_at": datetime.now(timezone.utc).isoformat() if voice_success else None,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.notifications.insert_one(voice_notification)
+                
+                if voice_success:
+                    logging.info(f"✓ Voice call sent successfully to {phone_number}")
+                    notifications_sent += 1
+                else:
+                    logging.error(f"✗ Voice call failed: {voice_result}")
+                    notifications_failed += 1
+                
+            except Exception as e:
+                logging.error(f"Error processing notification for student {record.get('student_id', 'unknown')}: {str(e)}")
+                notifications_failed += 1
+                continue
         
-        # Make voice call
-        voice_success, voice_result = await make_voice_call(parent["phone_number"], message)
+        logging.info(f"✅ Notification processing complete for {attendance_date}: {notifications_sent} sent, {notifications_failed} failed")
         
-        voice_notification = {
-            "id": str(uuid.uuid4()),
-            "student_id": student["id"],
-            "parent_id": parent["id"],
-            "type": "voice",
-            "status": "sent" if voice_success else "failed",
-            "message": message,
-            "phone_number": parent["phone_number"],
-            "retry_count": 0,
-            "error_message": None if voice_success else voice_result,
-            "sent_at": datetime.now(timezone.utc).isoformat() if voice_success else None,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.notifications.insert_one(voice_notification)
+    except Exception as e:
+        logging.error(f"Critical error in process_attendance_and_notify: {str(e)}")
+        raise
+        logging.error(f"Critical error in process_attendance_and_notify: {str(e)}")
+        raise
 
 # Authentication Routes
 @api_router.post("/auth/register", response_model=AdminUser)
@@ -419,12 +590,32 @@ async def delete_parent(parent_id: str, current_user: AdminUser = Depends(get_cu
 
 # Attendance Routes
 @api_router.post("/attendance", response_model=Attendance)
-async def create_attendance(attendance: AttendanceCreate, current_user: AdminUser = Depends(get_current_user)):
+async def create_attendance(
+    attendance: AttendanceCreate,
+    background_tasks: BackgroundTasks,
+    current_user: AdminUser = Depends(get_current_user)
+):
+    """
+    Create a single attendance record
+    
+    If status is 'absent', notifications will be triggered automatically
+    """
+    # Validate student exists
+    student = await db.students.find_one({"id": attendance.student_id}, {"_id": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
     attendance_obj = Attendance(**attendance.model_dump())
     doc = attendance_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.attendance.insert_one(doc)
+    
+    # If student is absent, trigger notification
+    if attendance.status.lower() == 'absent':
+        logging.info(f"Triggering notification for absent student: {student['name']} on {attendance.date}")
+        background_tasks.add_task(process_attendance_and_notify, attendance.date)
+    
     return attendance_obj
 
 @api_router.post("/attendance/upload-csv")
@@ -433,6 +624,25 @@ async def upload_attendance_csv(
     file: UploadFile = File(...),
     current_user: AdminUser = Depends(get_current_user)
 ):
+    """
+    Upload attendance CSV file and trigger notifications for absent students
+    
+    CSV Format:
+    - Required columns: roll_number, date, status, subject
+    - Status normalization:
+      - absent, a, 0, false → ABSENT
+      - present, p, 1, true → PRESENT
+    
+    Returns:
+    {
+        "status": "success",
+        "total_records": X,
+        "absent_count": X,
+        "notifications_sent": X,
+        "failed": X,
+        "skipped": X
+    }
+    """
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
     
@@ -440,40 +650,112 @@ async def upload_attendance_csv(
         contents = await file.read()
         df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
         
-        required_columns = ['roll_number', 'date', 'status']
+        # Validate required columns
+        required_columns = ['roll_number', 'date', 'status', 'subject']
         if not all(col in df.columns for col in required_columns):
-            raise HTTPException(status_code=400, detail=f"CSV must contain columns: {required_columns}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"CSV must contain columns: {required_columns}"
+            )
         
-        records_created = 0
+        total_records = 0
+        absent_count = 0
+        present_count = 0
+        skipped_count = 0
         attendance_date = None
         
-        for _, row in df.iterrows():
-            # Find student by roll number
-            student = await db.students.find_one({"roll_number": str(row['roll_number'])}, {"_id": 0})
-            if not student:
+        logging.info(f"📄 Processing CSV upload with {len(df)} rows by user: {current_user.email}")
+        
+        for index, row in df.iterrows():
+            try:
+                # Extract and normalize data
+                roll_number = str(row['roll_number']).strip()
+                date_str = str(row['date']).strip()
+                status_raw = str(row['status']).strip().lower()
+                subject = str(row['subject']).strip() if pd.notna(row.get('subject')) else "class"
+                
+                # Set attendance date (use first valid date)
+                if not attendance_date:
+                    attendance_date = date_str
+                
+                logging.info(f"📋 Processing attendance for {date_str}")
+                
+                # Step 1: Find student by roll number
+                student = await db.students.find_one({"roll_number": roll_number}, {"_id": 0})
+                
+                if not student:
+                    logging.warning(f"❌ Student not found: {roll_number}")
+                    skipped_count += 1
+                    continue
+                
+                logging.info(f"✓ Student found: {roll_number}")
+                
+                # Step 2: Normalize status
+                if status_raw in ['absent', 'a', '0', 'false']:
+                    status = 'absent'
+                    absent_count += 1
+                elif status_raw in ['present', 'p', '1', 'true']:
+                    status = 'present'
+                    present_count += 1
+                    logging.info(f"⏭️  Skipped present student: {roll_number}")
+                else:
+                    logging.warning(f"❌ Unknown status '{status_raw}' for roll {roll_number}, skipping")
+                    skipped_count += 1
+                    continue
+                
+                # Step 3: Create attendance record
+                attendance_obj = Attendance(
+                    student_id=student['id'],
+                    date=date_str,
+                    status=status,
+                    subject=subject
+                )
+                
+                doc = attendance_obj.model_dump()
+                doc['created_at'] = doc['created_at'].isoformat()
+                
+                await db.attendance.insert_one(doc)
+                total_records += 1
+                
+                logging.debug(f"✓ Attendance record created: {student['name']} ({roll_number}) - {status} - {subject} on {date_str}")
+                
+            except Exception as e:
+                logging.error(f"Error processing row {index}: {str(e)}")
+                skipped_count += 1
                 continue
-            
-            attendance_date = str(row['date'])
-            attendance_obj = Attendance(
-                student_id=student['id'],
-                date=attendance_date,
-                status=str(row['status']).lower(),
-                subject=str(row.get('subject', '')) if pd.notna(row.get('subject')) else None
-            )
-            
-            doc = attendance_obj.model_dump()
-            doc['created_at'] = doc['created_at'].isoformat()
-            
-            await db.attendance.insert_one(doc)
-            records_created += 1
         
-        # Trigger background notification task
-        if attendance_date:
+        # Step 4: Trigger background notification task ONLY for absent students
+        if attendance_date and absent_count > 0:
+            logging.info(f"📤 Triggering notifications for {absent_count} absent students on {attendance_date}")
             background_tasks.add_task(process_attendance_and_notify, attendance_date)
+            notifications_triggered = True
+        else:
+            logging.info(f"No absent students found, notifications not triggered")
+            notifications_triggered = False
         
-        return {"message": f"Successfully uploaded {records_created} attendance records", "records_created": records_created}
+        # Step 5: Return detailed response
+        response = {
+            "status": "success",
+            "total_records": total_records,
+            "absent_count": absent_count,
+            "present_count": present_count,
+            "notifications_sent": absent_count if notifications_triggered else 0,
+            "failed": 0,  # Will be updated by background task
+            "skipped": skipped_count,
+            "date": attendance_date,
+            "notifications_triggered": notifications_triggered
+        }
+        
+        logging.info(f"✅ CSV upload complete: {total_records} created, {absent_count} absent, {present_count} present, {skipped_count} skipped")
+        
+        return response
     
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+    except pd.errors.ParserError:
+        raise HTTPException(status_code=400, detail="Invalid CSV format")
     except Exception as e:
+        logging.error(f"Error processing CSV: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error processing CSV: {str(e)}")
 
 @api_router.get("/attendance", response_model=List[Attendance])
@@ -533,6 +815,50 @@ async def retry_notification(
     await db.notifications.update_one({"id": notification_id}, {"$set": update_data})
     
     return {"message": "Retry successful" if success else "Retry failed", "success": success}
+
+@api_router.get("/notifications/stats")
+async def get_notification_stats(
+    date: Optional[str] = None,
+    current_user: AdminUser = Depends(get_current_user)
+):
+    """
+    Get notification statistics
+    
+    Optional date parameter to filter by specific date (YYYY-MM-DD)
+    """
+    query = {}
+    if date:
+        query["created_at"] = {"$regex": f"^{date}"}
+    
+    total_notifications = await db.notifications.count_documents(query)
+    sent_notifications = await db.notifications.count_documents({**query, "status": "sent"})
+    failed_notifications = await db.notifications.count_documents({**query, "status": "failed"})
+    
+    sms_count = await db.notifications.count_documents({**query, "type": "sms"})
+    voice_count = await db.notifications.count_documents({**query, "type": "voice"})
+    
+    sms_sent = await db.notifications.count_documents({**query, "type": "sms", "status": "sent"})
+    voice_sent = await db.notifications.count_documents({**query, "type": "voice", "status": "sent"})
+    
+    return {
+        "date": date if date else "all_time",
+        "total_notifications": total_notifications,
+        "sent": sent_notifications,
+        "failed": failed_notifications,
+        "success_rate": round((sent_notifications / total_notifications * 100), 2) if total_notifications > 0 else 0,
+        "by_type": {
+            "sms": {
+                "total": sms_count,
+                "sent": sms_sent,
+                "failed": sms_count - sms_sent
+            },
+            "voice": {
+                "total": voice_count,
+                "sent": voice_sent,
+                "failed": voice_count - voice_sent
+            }
+        }
+    }
 
 # Voice Template Routes
 @api_router.post("/voice-templates", response_model=VoiceTemplate)
@@ -606,6 +932,87 @@ async def get_daily_summary(date: str, current_user: AdminUser = Depends(get_cur
         "absent_count": absent_count,
         "notifications_sent": notifications_sent,
         "attendance_percentage": round((present_count / total_records * 100), 2) if total_records > 0 else 0
+    }
+
+# Twilio Test Endpoint
+@api_router.post("/test/twilio", response_model=TwilioTestResponse)
+async def test_twilio_integration(
+    request: TwilioTestRequest,
+    current_user: AdminUser = Depends(get_current_user)
+):
+    """
+    Test Twilio SMS and Voice Call Integration
+    
+    This endpoint sends a test SMS and makes a test voice call to verify Twilio configuration.
+    
+    **Required:** Phone number in E.164 format (e.g., +919876543210)
+    
+    **Note:** For Twilio trial accounts, the phone number must be verified in Twilio Console.
+    """
+    logging.info(f"Twilio test requested by {current_user.email} for phone: {request.phone_number}")
+    
+    # Check if Twilio is configured
+    if not twilio_configured:
+        return TwilioTestResponse(
+            twilio_configured=False,
+            sms_result={
+                "success": False,
+                "error": "Twilio not configured. Please set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in backend/.env"
+            },
+            voice_result={
+                "success": False,
+                "error": "Twilio not configured"
+            },
+            message="Twilio credentials are missing. Please configure them in backend/.env file."
+        )
+    
+    # Test SMS
+    sms_message = f"Hello! This is a test SMS from MLR Institute Auto-Call System. Sent at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC."
+    sms_success, sms_result = await send_sms(request.phone_number, sms_message)
+    
+    # Wait 2 seconds before voice call
+    await asyncio.sleep(2)
+    
+    # Test Voice Call
+    voice_message = "Hello! This is a test call from M L R Institute Auto-Call Notification System. If you can hear this message, your Twilio integration is working correctly."
+    voice_success, voice_result = await make_voice_call(request.phone_number, voice_message, "en-IN")
+    
+    # Prepare response
+    response_message = ""
+    if sms_success and voice_success:
+        response_message = "✓ Both SMS and voice call sent successfully! Check your phone."
+    elif sms_success:
+        response_message = "✓ SMS sent successfully, but voice call failed. Check logs for details."
+    elif voice_success:
+        response_message = "✓ Voice call sent successfully, but SMS failed. Check logs for details."
+    else:
+        response_message = "✗ Both SMS and voice call failed. Check Twilio credentials and phone number format."
+    
+    return TwilioTestResponse(
+        twilio_configured=True,
+        sms_result={
+            "success": sms_success,
+            "message_sid": sms_result if sms_success else None,
+            "error": sms_result if not sms_success else None
+        },
+        voice_result={
+            "success": voice_success,
+            "call_sid": voice_result if voice_success else None,
+            "error": voice_result if not voice_success else None
+        },
+        message=response_message
+    )
+
+@api_router.get("/test/twilio-status")
+async def get_twilio_status(current_user: AdminUser = Depends(get_current_user)):
+    """
+    Check Twilio configuration status without sending any messages
+    """
+    return {
+        "configured": twilio_configured,
+        "account_sid": twilio_account_sid[:10] + "..." if twilio_account_sid else None,
+        "phone_number": twilio_phone_number if twilio_phone_number else None,
+        "message": "Twilio is configured and ready" if twilio_configured else "Twilio is not configured. Please set credentials in .env"
     }
 
 # Include the router in the main app
